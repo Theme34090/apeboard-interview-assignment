@@ -1,17 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { ethers } from 'ethers';
-import { ADDRESS_MASTERCHEF, BSC_RPC_ENDPOINT } from 'src/constants';
+import {
+  ADDRESS_MASTERCHEF,
+  BSC_RPC_ENDPOINT,
+  CONCURRENT_NUM,
+} from 'src/constants';
+import { FarmInfo } from 'src/types';
 import * as masterchefABI from '../abis/masterchef.json';
 import * as pancakePairABI from '../abis/pancakePair.json';
+import { AddressBalancesDto, UpdateCacheDto } from './autofarm.dto';
 // import * as cache from '../cache.json';
-
-type FarmInfo = {
-  poolId: number;
-  isLp: boolean;
-  wantTokenAddress?: string;
-  token0Address?: string;
-  token1Address?: string;
-};
 
 @Injectable()
 export class AutofarmService {
@@ -58,15 +56,14 @@ export class AutofarmService {
     return { poolId: poolId, isLp, ...tokenInfo };
   }
 
-  async updateCache() {
+  async updateCache(): Promise<UpdateCacheDto> {
     this.cachedData = [];
     const poolLength = await this.getPoolLength();
     console.log('poolLength', poolLength);
 
-    const concurrentNum = 10;
-    for (let i = 0; i < Math.ceil(poolLength / concurrentNum); i++) {
+    for (let i = 0; i < Math.ceil(poolLength / CONCURRENT_NUM); i++) {
       const funcArray: Array<Promise<FarmInfo>> = [];
-      for (let j = i * concurrentNum; j < (i + 1) * concurrentNum; j++) {
+      for (let j = i * CONCURRENT_NUM; j < (i + 1) * CONCURRENT_NUM; j++) {
         if (j >= poolLength || j < 1) continue;
         funcArray.push(this.fetchFarmInfo(j));
       }
@@ -77,7 +74,7 @@ export class AutofarmService {
       });
     }
 
-    return this.cachedData;
+    return { pools: this.cachedData };
     // this.cachedData = cache.cache;
   }
 
@@ -127,6 +124,15 @@ export class AutofarmService {
       let tmpResult;
       const wantTokenAddress = farmInfo.wantTokenAddress;
 
+      const commons = {
+        balance: ethers.utils.formatEther(stakedBalance.div(10 ^ 18)),
+        rewards: [
+          {
+            address: '0xa184088a740c695e156f91f5cc086a06bb78b827',
+            balance: ethers.utils.formatEther(rewardBalance.div(10 ^ 18)),
+          },
+        ],
+      };
       if (farmInfo.isLp) {
         const wantContract = new ethers.Contract(
           wantTokenAddress,
@@ -159,13 +165,7 @@ export class AutofarmService {
               ),
             },
           ],
-          balance: ethers.utils.formatEther(stakedBalance.div(10 ^ 18)),
-          rewards: [
-            {
-              address: '0xa184088a740c695e156f91f5cc086a06bb78b827',
-              balance: ethers.utils.formatEther(rewardBalance.div(10 ^ 18)),
-            },
-          ],
+          ...commons,
           lpAdress: wantTokenAddress,
         };
       } else {
@@ -176,13 +176,7 @@ export class AutofarmService {
               balance: ethers.utils.formatEther(stakedBalance.div(10 ^ 18)),
             },
           ],
-          balance: ethers.utils.formatEther(stakedBalance.div(10 ^ 18)),
-          rewards: [
-            {
-              address: '0xa184088a740c695e156f91f5cc086a06bb78b827',
-              balance: ethers.utils.formatEther(rewardBalance.div(10 ^ 18)),
-            },
-          ],
+          ...commons,
         };
       }
 
@@ -196,18 +190,17 @@ export class AutofarmService {
     }
   }
 
-  async getAddressStakedBalances(userAddress: string) {
+  async getAddressBalances(userAddress: string): Promise<AddressBalancesDto> {
     if (this.cachedData.length === 0) {
       await this.updateCache();
     }
     const poolLength = await this.getPoolLength();
 
-    const result = [];
-    const concurrentNum = 10;
-    for (let i = 0; i < Math.ceil(poolLength / concurrentNum); i++) {
+    const result: any = []; // too lazy to add type here
+    for (let i = 0; i < Math.ceil(poolLength / CONCURRENT_NUM); i++) {
       const farmInfoSlice = this.cachedData.slice(
-        i * concurrentNum,
-        (i + 1) * concurrentNum,
+        i * CONCURRENT_NUM,
+        (i + 1) * CONCURRENT_NUM,
       );
       const funcArray = farmInfoSlice.map((farmInfo) =>
         this.fetchStakedAndRewardBalance(farmInfo.poolId, userAddress),

@@ -1,5 +1,14 @@
-import { LpTokenAutofarmPool, SingleTokenAutofarmPool } from 'src/interface';
+import { FarmInfo } from 'src/types';
 
 export class UpdateCacheDto {
-  pools: Array<SingleTokenAutofarmPool | LpTokenAutofarmPool>;
+  pools: Array<FarmInfo>;
+}
+
+export class AddressBalancesDto {
+  farms: {
+    tokens: Array<{ address: string; balance: string }>;
+    balance: string;
+    rewards: Array<{ address: string; balance: string }>;
+    lpAddress?: string;
+  };
 }

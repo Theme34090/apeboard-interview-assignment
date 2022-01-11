@@ -11,7 +11,7 @@ export class AutofarmController {
   }
 
   @Get(':address')
-  async getAddressStakedBalances(@Param() params) {
-    return this.autofarmService.getAddressStakedBalances(params.address);
+  async getAddressBalances(@Param() params) {
+    return this.autofarmService.getAddressBalances(params.address);
   }
 }
